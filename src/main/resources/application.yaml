@@ -48,3 +48,16 @@ management:
     web:
       exposure:
         include: health,info,metrics
+
+app:
+  outbox:
+    batch-size: 100
+    max-attempts: 10
+    send-timeout: 10s
+    retention: 7d
+    relay:
+      enabled: true
+      poll-interval: 1000
+      initial-delay: 5000
+    cleanup:
+      cron: "0 0 * * * *"
