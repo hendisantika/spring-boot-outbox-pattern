@@ -1,0 +1,5 @@
+app:
+  outbox:
+    relay:
+      poll-interval: 200
+      initial-delay: 0
