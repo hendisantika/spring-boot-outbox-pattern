@@ -68,17 +68,44 @@ perubahan data bisnis. Proses terpisah (relay) lalu membaca tabel itu dan mempub
 
 ## Menjalankan
 
+### Opsi A — Semua di Docker Compose
+
+Prasyarat: Docker.
+
+```bash
+# Build image aplikasi lalu jalankan app, MySQL, Kafka (KRaft), dan Kafka UI
+docker compose up -d --build
+
+# Cek status (app menunggu MySQL & Kafka healthy dulu)
+docker compose ps
+docker compose logs -f app
+
+# Stop (tambahkan -v untuk menghapus data MySQL)
+docker compose down
+```
+
+Image dibangun dari `Dockerfile` multi-stage: build dengan JDK 25, runtime JRE 25 Alpine, jar dipecah per layer
+Spring Boot supaya rebuild cepat, dan aplikasi berjalan sebagai user non-root. Healthcheck memakai
+`/actuator/health`.
+
+### Opsi B — Aplikasi di lokal (development)
+
 Prasyarat: Java 25, Docker.
 
 ```bash
-# 1. Jalankan MySQL, Kafka (KRaft), dan Kafka UI
-docker compose up -d
+# 1. Jalankan infrastruktur saja
+docker compose up -d mysql kafka kafka-ui
 
 # 2. Jalankan aplikasi
 ./mvnw spring-boot:run
 ```
 
-Kafka UI tersedia di http://localhost:8081.
+| Service  | URL                    |
+|----------|------------------------|
+| API      | http://localhost:8080  |
+| Kafka UI | http://localhost:8081  |
+| MySQL    | `localhost:3306`       |
+| Kafka    | `localhost:9092`       |
 
 ### Contoh API
 
