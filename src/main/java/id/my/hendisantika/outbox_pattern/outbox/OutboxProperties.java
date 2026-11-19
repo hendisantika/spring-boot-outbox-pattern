@@ -23,11 +23,14 @@ import java.time.Duration;
  * @param maxAttempts   batas percobaan publish sebelum event ditandai FAILED
  * @param sendTimeout   waktu tunggu ack dari broker per event
  * @param retention     lama event SENT disimpan sebelum dihapus oleh cleanup
+ * @param maxRunDuration batas waktu satu kali relay berjalan; harus jauh lebih kecil dari {@code lockAtMostFor}
+ *                       ShedLock supaya lock tidak kedaluwarsa saat relay masih berjalan
  */
 @ConfigurationProperties(prefix = "app.outbox")
 public record OutboxProperties(
         @DefaultValue("100") int batchSize,
         @DefaultValue("10") int maxAttempts,
         @DefaultValue("10s") Duration sendTimeout,
-        @DefaultValue("7d") Duration retention) {
+        @DefaultValue("7d") Duration retention,
+        @DefaultValue("1m") Duration maxRunDuration) {
 }

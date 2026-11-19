@@ -53,7 +53,8 @@ class OutboxRelayTest {
         when(transactionTemplate.execute(any())).thenAnswer(invocation ->
                 invocation.<TransactionCallback<?>>getArgument(0).doInTransaction(new SimpleTransactionStatus()));
 
-        OutboxProperties properties = new OutboxProperties(100, 3, Duration.ofSeconds(1), Duration.ofDays(7));
+        OutboxProperties properties = new OutboxProperties(100, 3, Duration.ofSeconds(1), Duration.ofDays(7),
+                Duration.ofMinutes(1));
         relay = new OutboxRelay(repository, kafkaTemplate, transactionTemplate, properties,
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }

@@ -55,9 +55,13 @@ app:
     max-attempts: 10
     send-timeout: 10s
     retention: 7d
+    max-run-duration: 1m
     relay:
       enabled: true
       poll-interval: 1000
       initial-delay: 5000
+      # ShedLock: hanya satu instance yang menjalankan relay pada satu waktu
+      lock-at-most-for: PT5M
+      lock-at-least-for: PT0S
     cleanup:
       cron: "0 0 * * * *"

@@ -24,8 +24,8 @@ perubahan data bisnis. Proses terpisah (relay) lalu membaca tabel itu dan mempub
  │  INSERT INTO outbox_events (status = 'PENDING') ... │
  └─────────────────────────────────────────────────────┘
         │
-        ▼  @Scheduled (polling setiap 1 detik)
- OutboxRelay
+        ▼  @Scheduled (polling setiap 1 detik) + @SchedulerLock
+ OutboxRelay   ← hanya 1 instance yang memegang lock "outbox-relay"
    SELECT ... WHERE status='PENDING' FOR UPDATE SKIP LOCKED
    kafkaTemplate.send(...).get()   ← tunggu ack broker
    UPDATE status = 'SENT'
@@ -43,19 +43,24 @@ perubahan data bisnis. Proses terpisah (relay) lalu membaca tabel itu dan mempub
 | `outbox.OutboxEventWriter`                         | Serialisasi payload ke JSON dan insert ke outbox (`Propagation.MANDATORY`)      |
 | `outbox.OutboxRelay`                               | Polling publisher ke Kafka, retry, menandai `FAILED`, cleanup event lama        |
 | `consumer.OrderEventListener`                      | Contoh consumer idempotent memakai tabel `processed_events`                     |
-| `db/migration/V*.sql`                              | Skema Flyway: `outbox_events`, `orders`, `processed_events`                     |
+| `config.ShedLockConfig`                            | Lock terdistribusi (tabel `shedlock`) agar relay jalan di satu instance         |
+| `db/migration/V*.sql`                              | Skema Flyway: `outbox_events`, `orders`, `processed_events`, `shedlock`         |
 
 ## Keputusan desain
 
 - **At-least-once delivery.** Status `SENT` disimpan setelah broker memberi ack. Kalau aplikasi mati di antara
   publish dan commit, event akan dipublish ulang, jadi consumer **wajib idempotent**. Header `eventId` (UUID baris
   outbox) dipakai sebagai kunci deduplikasi.
-- **`FOR UPDATE SKIP LOCKED`** (MySQL 8+). Beberapa instance aplikasi bisa menjalankan relay bersamaan tanpa
-  mempublish baris yang sama.
+- **Multi-instance dengan ShedLock.** Job `relay` dan `cleanup` memakai `@SchedulerLock` dengan lock di tabel
+  `shedlock` (MySQL, memakai jam database). Saat aplikasi di-scale ke banyak instance, hanya satu instance yang
+  menjalankan relay pada satu waktu; instance lain otomatis skip dan mengambil alih kalau instance pemegang lock mati
+  (setelah `lock-at-most-for`).
 - **Urutan per aggregate.** Event dikirim dengan key `aggregateId`, sehingga semua event satu order masuk ke partisi
-  yang sama. Relay berhenti di event pertama yang gagal dalam satu batch supaya event berikutnya tidak menyalip.
-  Catatan: dengan banyak instance relay, dua batch berbeda bisa berisi event dari order yang sama. Kalau urutan
-  global per aggregate sangat penting, jalankan relay di satu instance aktif (mis. dengan leader election / ShedLock).
+  yang sama. Karena relay hanya jalan di satu instance, batch tidak saling menyalip. Relay juga berhenti di event
+  pertama yang gagal dalam satu batch supaya event berikutnya tidak mendahului.
+- **`FOR UPDATE SKIP LOCKED`** (MySQL 8+) tetap dipakai sebagai pengaman: kalau lock ShedLock kedaluwarsa saat relay
+  masih berjalan, dua instance tetap tidak akan mempublish baris yang sama. Untuk mencegah kondisi itu, satu kali
+  relay dibatasi `app.outbox.max-run-duration` (default 1 menit), jauh di bawah `lock-at-most-for` (5 menit).
 - **Retry & poison message.** Setiap kegagalan menambah `attempts` dan mencatat `last_error`. Setelah
   `app.outbox.max-attempts`, status menjadi `FAILED` dan event perlu ditangani manual.
 - **Producer idempotent** (`enable.idempotence=true`, `acks=all`) mencegah duplikat akibat retry di level producer.
@@ -117,7 +122,10 @@ docker exec -it outbox-kafka /opt/kafka/bin/kafka-console-consumer.sh \
 | `app.outbox.send-timeout`         | `10s`          | Waktu tunggu ack broker per event            |
 | `app.outbox.retention`            | `7d`           | Umur event `SENT` sebelum dihapus            |
 | `app.outbox.relay.enabled`        | `true`         | Aktif/nonaktifkan relay di instance ini      |
+| `app.outbox.max-run-duration`     | `1m`           | Batas waktu satu kali relay berjalan         |
 | `app.outbox.relay.poll-interval`  | `1000`         | Jeda antar polling (ms)                      |
+| `app.outbox.relay.lock-at-most-for` | `PT5M`       | Lock relay dilepas paksa jika instance mati  |
+| `app.outbox.relay.lock-at-least-for` | `PT0S`      | Lock relay minimal dipegang selama ini       |
 | `app.outbox.cleanup.cron`         | `0 0 * * * *`  | Jadwal cleanup                               |
 
 Koneksi bisa diatur lewat environment variable `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_DATABASE`, `MYSQL_USER`,
@@ -136,4 +144,5 @@ Integration test memakai **Testcontainers** (MySQL 26.10 & Apache Kafka 4.3), se
 - Request invalid tidak menghasilkan order maupun event.
 - `OutboxEventWriter` menolak dipanggil di luar transaksi.
 - Consumer idempotent terhadap pesan duplikat.
+- Relay tidak mempublish selama instance lain memegang lock ShedLock, lalu lanjut setelah lock dilepas.
 - Relay berhenti di kegagalan pertama dan menandai `FAILED` setelah batas percobaan (unit test).

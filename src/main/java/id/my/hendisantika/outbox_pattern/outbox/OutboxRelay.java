@@ -1,5 +1,7 @@
 package id.my.hendisantika.outbox_pattern.outbox;
 
+import net.javacrumbs.shedlock.core.LockAssert;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,13 +59,23 @@ public class OutboxRelay {
         this.clock = clock;
     }
 
+    /**
+     * Dijalankan oleh satu instance saja pada satu waktu (ShedLock), sehingga urutan event per aggregate tetap
+     * terjaga walaupun aplikasi di-scale ke banyak instance. Relay terus memproses batch selama batch penuh,
+     * tetapi berhenti setelah {@code maxRunDuration} supaya selesai jauh sebelum lock kedaluwarsa.
+     */
     @Scheduled(fixedDelayString = "${app.outbox.relay.poll-interval:1000}",
             initialDelayString = "${app.outbox.relay.initial-delay:1000}")
+    @SchedulerLock(name = "outbox-relay",
+            lockAtMostFor = "${app.outbox.relay.lock-at-most-for:PT5M}",
+            lockAtLeastFor = "${app.outbox.relay.lock-at-least-for:PT0S}")
     public void relay() {
+        LockAssert.assertLocked();
+        Instant deadline = Instant.now(clock).plus(properties.maxRunDuration());
         int published;
         do {
             published = publishBatch();
-        } while (published == properties.batchSize());
+        } while (published == properties.batchSize() && Instant.now(clock).isBefore(deadline));
     }
 
     /**
@@ -121,7 +133,9 @@ public class OutboxRelay {
     }
 
     @Scheduled(cron = "${app.outbox.cleanup.cron:0 0 * * * *}")
+    @SchedulerLock(name = "outbox-cleanup", lockAtMostFor = "PT10M", lockAtLeastFor = "PT1M")
     public void cleanup() {
+        LockAssert.assertLocked();
         Instant before = Instant.now(clock).minus(properties.retention());
         Integer deleted = transactionTemplate.execute(status ->
                 repository.deleteByStatusAndSentAtBefore(OutboxStatus.SENT, before));
