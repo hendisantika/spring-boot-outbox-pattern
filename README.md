@@ -129,7 +129,7 @@ Koneksi bisa diatur lewat environment variable `MYSQL_HOST`, `MYSQL_PORT`, `MYSQ
 ./mvnw test
 ```
 
-Integration test memakai **Testcontainers** (MySQL 8.4 & Apache Kafka 4.1), sehingga hanya butuh Docker. Yang diuji:
+Integration test memakai **Testcontainers** (MySQL 26.10 & Apache Kafka 4.3), sehingga hanya butuh Docker. Yang diuji:
 
 - Order dan outbox event tersimpan atomik, lalu relay mempublish ke Kafka dan consumer memprosesnya.
 - Urutan `OrderCreated` diikuti `OrderCancelled`.

@@ -23,12 +23,12 @@ public class TestcontainersConfiguration {
     @Bean
     @ServiceConnection
     MySQLContainer mysqlContainer() {
-        return new MySQLContainer(DockerImageName.parse("mysql:8.4"));
+        return new MySQLContainer(DockerImageName.parse("mysql:26.10"));
     }
 
     @Bean
     @ServiceConnection
     KafkaContainer kafkaContainer() {
-        return new KafkaContainer(DockerImageName.parse("apache/kafka:4.1.0"));
+        return new KafkaContainer(DockerImageName.parse("apache/kafka:4.3.1"));
     }
 }
