@@ -1,0 +1,49 @@
+version: 2
+updates:
+  - package-ecosystem: maven
+    directory: /
+    schedule:
+      interval: daily
+      time: "05:00"
+      timezone: Asia/Jakarta
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - dependencies
+      - java
+    groups:
+      spring-boot:
+        patterns:
+          - "org.springframework.boot:*"
+      testcontainers:
+        patterns:
+          - "org.testcontainers:*"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: daily
+      time: "05:00"
+      timezone: Asia/Jakarta
+    commit-message:
+      prefix: "ci(deps)"
+    labels:
+      - dependencies
+      - github-actions
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: daily
+      time: "05:00"
+      timezone: Asia/Jakarta
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - dependencies
+      - docker
